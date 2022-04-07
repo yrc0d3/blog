@@ -247,11 +247,27 @@ Kbuild系统使用`obj-y`和`obj-m`两个变量来表示不同模块的编译配
 可通过`MODULE_LICENSE()`宏来指定协议。
 
 ### 使内核模块模拟library特性
-不要重复造轮子，尽量复用软件，模块化。
+
+> do not reinvent the wheel, software reuse, modularity
 
 可内核里是没有library的，但有两种方式可以让内核模块，模拟库的效果：
 
 1. 在内核模块显式引入其他模块的源码文件
 2. module stacking
 
-第一种方式，
+第一种方式，除了在c语言源码文件中通过include引入其他c文件之外，还需要修改Makefile：
+
+```make
+obj-m               := <label>.o
+<label>-objs := proj1.o proj2.o proj3.o
+```
+
+可以看到，在`obj-m`指令之后，紧接着`<label>-objs`指令。内核编译系统会将每个被引入的c文件单独编译成一个`.o`文件，然后把它们链接在一起，从而形成最终的二进制内核模块目标文件`<label>.ko`。
+
+第8章中有个一个真实的示例：
+
+```make
+# ch8/lowlevel_mem/Makefile
+obj-m                 += lowlevel_mem_lkm.o
+lowlevel_mem_lkm-objs := lowlevel_mem.o ../../klib_llkd.o
+```

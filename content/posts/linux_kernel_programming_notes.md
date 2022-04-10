@@ -1,7 +1,6 @@
 ---
 title: "《Linux Kernel Programming》读书笔记"
 date: 2022-04-05T22:45:55+08:00
-draft: true
 categories: [读书笔记]
 tags: [linux]
 comment: true
@@ -246,7 +245,9 @@ Kbuild系统使用`obj-y`和`obj-m`两个变量来表示不同模块的编译配
 
 可通过`MODULE_LICENSE()`宏来指定协议。
 
-### 使内核模块模拟library特性
+### Emulating "library-like" features for kernel modules
+
+使内核模块模拟library特性
 
 > do not reinvent the wheel, software reuse, modularity
 
@@ -255,7 +256,9 @@ Kbuild系统使用`obj-y`和`obj-m`两个变量来表示不同模块的编译配
 1. 在内核模块显式引入其他模块的源码文件
 2. module stacking
 
-第一种方式，除了在c语言源码文件中通过include引入其他c文件之外，还需要修改Makefile：
+#### Performing library emulation via multiple source files
+
+除了在c语言源码文件中通过include引入其他c文件之外，还需要修改Makefile：
 
 ```make
 obj-m               := <label>.o
@@ -271,3 +274,74 @@ obj-m               := <label>.o
 obj-m                 += lowlevel_mem_lkm.o
 lowlevel_mem_lkm-objs := lowlevel_mem.o ../../klib_llkd.o
 ```
+
+#### module stacking
+
+在了解module stacking之前，需要先了解下内核模块中方法和变量的作用域。
+
+自内核2.6版本开始，所有的内核模块的变量(static和global)、方法的作用域默认只在本模块内，外部不可见。
+
+LKM框架提供了`EXPORT_SYMBOL()`和`EXPORT_SYMBOL_GPL()`这两个宏来改变作用域，使得全部模块都可见。
+
+想要使用`EXPORT_SYMBOL()`，需要去掉`static`修饰符(虽然允许同时使用`static`和`EXPORT_SYMBOL`，但最好不要这么用)。
+
+```c
+int my_glob = 5;
+EXPORT_SYMBOL(my_glob);
+
+long my_foo(int key)
+{ [...]
+}
+EXPORT_SYMBOL(my_foo);
+```
+
+当一个内核模块的变量、数据结构、函数使用`EXPORT_SYMBOL()`之后，其他模块就可以通过`extern`引用它们了。（Makefile中的`obj-m`指令也需要添加被引用的模块？？？暂不确定）
+
+```c
+extern int my_glob;
+extern long my_foo(int);
+```
+
+通过`lsmod`命令可以查看一个内核模块被其他模块引用的情况，第三列表示数量，第四列是其used by的具体模块名称。
+
+```bash
+$ lsmod | grep vbox
+vboxnetadp       28672  0
+vboxnetflt       28672  1
+vboxdrv         479232  3 vboxnetadp,vboxnetflt
+```
+
+内核模块之间的这种依赖关系，就像是stack一样，因此有了module stacking这个概念。
+
+### module parameters
+
+模块参数是在模块插入时（`insmod`）通过`name=value`的格式传入的，例如`sudo insmod modparams1.ko mp_debug_level=2`。
+
+module没有`main()`方法，也就没有`(argc, argv)`参数列表，那么这种传参是如何实现的？其实是链接器做的：在内核模块中将变量声明为`static`，然后调用宏`module_param()`即可。
+
+```c
+// ch5/modparams/modparams1/modparams1.c
+static int mp_debug_level;
+module_param(mp_debug_level, int, 0660);
+MODULE_PARM_DESC(mp_debug_level,
+"Debug level [0-2]; 0 => no debug messages, 2 => high verbosity");
+```
+
+`module_param()`的三个参数：
+1. 变量名称，需要`stacic`修饰
+2. 数据类型
+3. 对应sysfs的文件权限
+
+`MODULE_PARM_DESC`用于添加描述信息，通过`modinfo`命令可查看。
+
+在模块被插入之后，可以在`/sys/module/<module-name>/parameters/*`看到所有的模块参数。`module_param()`的第三个参数就对应这里的特定参数的文件权限。修改文件中的值，也就修改了模块参数。
+
+模块参数支持的数据类型在`include/linux/moduleparam.h`中`module_param`的注释中可以查看。
+
+所有的内核模块参数默认都是可选的。如何做到必填呢？两种方式：一是在`module_init`时检查参数如果是默认值就报错，二是使用`module_param_cb`这个宏。
+
+### auto-loading modules on system boot
+
+`make modules_install`之后，将`<module-name>`写入文件`/etc/modules-load.d/<module-name>.conf`中（或者添加到文件`/etc/modules-load.d/modules.conf`中）。重启系统生效。
+
+如果自动装载的模块需要输入参数怎么办？编辑`/etc/modprobe.d/*.conf`文件，按照格式`options <module-name> <parameter-name>=<value>`进行传参。

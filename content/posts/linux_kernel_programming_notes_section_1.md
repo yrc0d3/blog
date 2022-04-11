@@ -1,5 +1,5 @@
 ---
-title: "《Linux Kernel Programming》读书笔记"
+title: "《Linux Kernel Programming》读书笔记-第一部分"
 date: 2022-04-05T22:45:55+08:00
 categories: [读书笔记]
 tags: [linux]
@@ -10,7 +10,7 @@ math: true
 ---
 
 ## Kernel Workspace Setup
-安装虚拟机：[[Apple Silicon M1的Mac电脑安装ubuntu虚拟机 id=7787d9a5-9a6e-4d71-8283-3becf9bd7525]]
+安装虚拟机：[《Apple Silicon M1的Mac电脑安装ubuntu虚拟机》](../apple_silicon_mac_install_vm_ubuntu)
 
 安装cross toolchain and QEMU：`sudo apt install qemu-system-arm`
 
@@ -261,7 +261,7 @@ Kbuild系统使用`obj-y`和`obj-m`两个变量来表示不同模块的编译配
 除了在c语言源码文件中通过include引入其他c文件之外，还需要修改Makefile：
 
 ```make
-obj-m               := <label>.o
+obj-m        := <label>.o
 <label>-objs := proj1.o proj2.o proj3.o
 ```
 
@@ -345,3 +345,11 @@ MODULE_PARM_DESC(mp_debug_level,
 `make modules_install`之后，将`<module-name>`写入文件`/etc/modules-load.d/<module-name>.conf`中（或者添加到文件`/etc/modules-load.d/modules.conf`中）。重启系统生效。
 
 如果自动装载的模块需要输入参数怎么办？编辑`/etc/modprobe.d/*.conf`文件，按照格式`options <module-name> <parameter-name>=<value>`进行传参。
+
+### security
+
+两个影响system log的参数（可避免暴露真实内核数据地址）：
+- `/proc/sys/kernel/dmesg_restrict`
+- `/proc/sys/kernel/kptr_restrict`
+
+签名机制：https://www.kernel.org/doc/html/latest/admin-guide/module-signing.html
